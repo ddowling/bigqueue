@@ -165,6 +165,7 @@ public class BigQueueUnitTest {
                         Thread.yield();
                     } catch (Exception e) {
                         e.printStackTrace();
+                        fail("Unexpected exception in enqueue operation");
                     }
             }
         });
@@ -180,13 +181,14 @@ public class BigQueueUnitTest {
                             byte[] bytes = bigQueue.dequeue();
                             String str = new String(bytes);
                             long curr = Long.parseLong(str);
-                            assertEquals(item+1, curr);
+                            assertEquals(item + 1, curr);
                             item = curr;
                         }
 
                         Thread.yield();
                     } catch (Exception e) {
                         e.printStackTrace();
+                        fail("Unexpected exception in deqeueue operation");
                     }
             }
         });

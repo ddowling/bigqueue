@@ -356,7 +356,7 @@ public class BigArrayUnitTest {
 			bigArray = new BigArrayImpl(testDir, "invalid_data_page_size", BigArrayImpl.MINIMUM_DATA_PAGE_SIZE - 1);
 			fail("should throw invalid page size exception");
 		} catch (IllegalArgumentException iae) {
-			// ecpected
+			// expected
 		}
 	}
 	
