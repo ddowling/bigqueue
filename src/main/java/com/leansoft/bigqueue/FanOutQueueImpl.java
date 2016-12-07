@@ -99,7 +99,7 @@ public class FanOutQueueImpl implements IFanOutQueue {
 	}
 	
 	@Override
-	public boolean isEmpty() {
+	public boolean isEmpty() throws IOException {
 		return this.innerArray.isEmpty();
 	}
 
@@ -117,7 +117,7 @@ public class FanOutQueueImpl implements IFanOutQueue {
 			try {
 				qf.writeLock.lock();
 				
-				if (qf.index.get() == innerArray.arrayHeadIndex.get()) {
+				if (qf.index.get() == innerArray.getHeadIndex()) {
 					return null; // empty
 				}
 				
@@ -317,7 +317,7 @@ public class FanOutQueueImpl implements IFanOutQueue {
 	}
 	
 	@Override
-	public long size() {
+	public long size() throws IOException {
 		return this.innerArray.size();
 	}
 	
@@ -412,7 +412,7 @@ public class FanOutQueueImpl implements IFanOutQueue {
 		}
 		
 		void validateAndAdjustIndex() throws IOException {
-			if (index.get() != innerArray.arrayHeadIndex.get()) { // ok that index is equal to array head index
+			if (index.get() != innerArray.getHeadIndex()) { // ok that index is equal to array head index
 				try {
 					innerArray.validateIndex(index.get());
 				} catch (IndexOutOfBoundsException ex) { // maybe the back array has been truncated to limit size
@@ -423,7 +423,7 @@ public class FanOutQueueImpl implements IFanOutQueue {
 		
 		// reset queue front index to the tail of array
 		void resetIndex() throws IOException {
-			index.set(innerArray.arrayTailIndex.get());
+			index.set(innerArray.getTailIndex());
 			
 			this.persistIndex();
 		}
@@ -450,12 +450,12 @@ public class FanOutQueueImpl implements IFanOutQueue {
 	}
 
 	@Override
-	public long getFrontIndex() {
+	public long getFrontIndex() throws IOException {
 		return this.innerArray.getTailIndex();
 	}
 
 	@Override
-	public long getRearIndex() {
+	public long getRearIndex() throws IOException {
 		return this.innerArray.getHeadIndex();
 	}
 

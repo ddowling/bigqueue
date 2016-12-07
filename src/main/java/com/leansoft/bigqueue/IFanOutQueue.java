@@ -33,7 +33,7 @@ public interface IFanOutQueue extends Closeable {
 	 * 
 	 * @return true if empty, false otherwise
 	 */
-	public boolean isEmpty();
+	public boolean isEmpty() throws IOException;
 	
 	/**
 	 * Adds an item at the back of the queue
@@ -123,7 +123,7 @@ public interface IFanOutQueue extends Closeable {
 	 *  
 	 * @return total number
 	 */
-	public long size();
+	public long size() throws IOException;
 	
 	/**
 	 * Force to persist current state of the queue, 
@@ -177,7 +177,7 @@ public interface IFanOutQueue extends Closeable {
     /**
      * Reset the front index of a fanout queue.
      * 
-     * @param fandoutId fanout identifier
+     * @param fanoutId fanout identifier
      * @param index target index
      * @throws IOException exception thrown during the operation
      */
@@ -195,7 +195,7 @@ public interface IFanOutQueue extends Closeable {
 	 * 
 	 * @return an index
 	 */
-	public long getFrontIndex();
+	public long getFrontIndex() throws IOException;
 	
 	/**
 	 * Get front index of specific fanout queue
@@ -210,6 +210,6 @@ public interface IFanOutQueue extends Closeable {
 	 * 
 	 * @return an index
 	 */
-	public long getRearIndex();
+	public long getRearIndex() throws IOException;
 
 }

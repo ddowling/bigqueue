@@ -87,13 +87,6 @@ public class BigArrayImpl implements IBigArray {
 	// only use the first page
 	static final long META_DATA_PAGE_INDEX = 0;
 	
-	// head index of the big array, this is the read write barrier.
-	// readers can only read items before this index, and writes can write this index or after
-	final AtomicLong arrayHeadIndex = new AtomicLong();
-	// tail index of the big array,
-	// readers can't read items before this tail
-	final AtomicLong arrayTailIndex = new AtomicLong();
-	
 	// head index of the data page, this is the to be appended data page index
 	long headDataPageIndex;
 	// head offset of the data page, this is the to be appended data offset
@@ -168,9 +161,6 @@ public class BigArrayImpl implements IBigArray {
 				this.arrayDirectory + META_DATA_PAGE_FOLDER, 
 				10 * 1000/*does not matter*/);
 		
-		// initialize array indexes
-		initArrayIndex();
-
 		// initialize data page indexes
 		initDataPageIndex();
 	}
@@ -210,7 +200,7 @@ public class BigArrayImpl implements IBigArray {
       }
 
       // advance the tail to index
-      this.arrayTailIndex.set(index);
+      setTailIndex(index);
     } finally {
       arrayWriteLock.unlock();
     }
@@ -240,17 +230,6 @@ public class BigArrayImpl implements IBigArray {
 		}	
 	}
 	
-	// find out array head/tail from the meta data
-	void initArrayIndex() throws IOException {
-		IMappedPage metaDataPage = this.metaPageFactory.acquirePage(META_DATA_PAGE_INDEX);
-		ByteBuffer metaBuf = metaDataPage.getLocal(0);
-		long head = metaBuf.getLong();
-		long tail = metaBuf.getLong();
-		
-		arrayHeadIndex.set(head);
-		arrayTailIndex.set(tail);
-	}
-	
 	// find out data page head index and offset
 	void initDataPageIndex() throws IOException {
 
@@ -261,7 +240,7 @@ public class BigArrayImpl implements IBigArray {
 			IMappedPage previousIndexPage = null;
 			long previousIndexPageIndex = -1;
 			try {
-				long previousIndex = this.arrayHeadIndex.get() - 1;
+				long previousIndex = getHeadIndex() - 1;
 				previousIndexPageIndex = Calculator.div(previousIndex, INDEX_ITEMS_PER_PAGE_BITS); // shift optimization
 				previousIndexPage = this.indexPageFactory.acquirePage(previousIndexPageIndex);
 				int previousIndexPageOffset = (int) (Calculator.mul(Calculator.mod(previousIndex, INDEX_ITEMS_PER_PAGE_BITS), INDEX_ITEM_LENGTH_BITS));
@@ -304,8 +283,9 @@ public class BigArrayImpl implements IBigArray {
 				
 				toAppendDataPageIndex = this.headDataPageIndex;
 				int toAppendDataItemOffset  = this.headDataItemOffset;
-				
-				toAppendArrayIndex = this.arrayHeadIndex.get();
+
+				// Get the current head position and THEN increment head index
+				toAppendArrayIndex = incrementHeadIndex();
 				
 				// append data
 				toAppendDataPage = this.dataPageFactory.acquirePage(toAppendDataPageIndex);
@@ -327,17 +307,6 @@ public class BigArrayImpl implements IBigArray {
 				long currentTime = System.currentTimeMillis();
 				toAppendIndexPageBuffer.putLong(currentTime);
 				toAppendIndexPage.setDirty(true);
-				
-				// advance the head
-				this.arrayHeadIndex.incrementAndGet();
-				
-				// update meta data
-				IMappedPage metaDataPage = this.metaPageFactory.acquirePage(META_DATA_PAGE_INDEX);
-				ByteBuffer metaDataBuf = metaDataPage.getLocal(0);
-				metaDataBuf.putLong(this.arrayHeadIndex.get());
-				metaDataBuf.putLong(this.arrayTailIndex.get());
-				metaDataPage.setDirty(true);
-	
 			} finally {
 				
 				appendLock.unlock();
@@ -438,53 +407,54 @@ public class BigArrayImpl implements IBigArray {
 		}
 	}
 	
-	void validateIndex(long index) {
-		if (this.arrayTailIndex.get() <= this.arrayHeadIndex.get()) {
-			if (index < this.arrayTailIndex.get() || index >= this.arrayHeadIndex.get()) {
+	void validateIndex(long index) throws IOException, IndexOutOfBoundsException {
+		long head = getHeadIndex();
+		long tail = getTailIndex();
+		if (tail <= head) {
+			if (index < tail || index >= head) {
 				throw new IndexOutOfBoundsException();
 			}
 		} else {
-			if (index < this.arrayTailIndex.get() && index >= this.arrayHeadIndex.get()) {
+			if (index < tail&& index >= head) {
 				throw new IndexOutOfBoundsException();
 			}
-		}
-	}
-
-	public long size() {
-		try {
-			arrayReadLock.lock();
-			return (this.arrayHeadIndex.get() - this.arrayTailIndex.get());
-		} finally {
-			arrayReadLock.unlock();
-		}
-	}
-
-	public long getHeadIndex() {
-		try {
-			arrayReadLock.lock();
-			return arrayHeadIndex.get();
-		} finally {
-			arrayReadLock.unlock();
-		}
-	}
-
-	public long getTailIndex() {
-		try {
-			arrayReadLock.lock();
-			return arrayTailIndex.get();
-		} finally {
-			arrayReadLock.unlock();
 		}
 	}
 
 	@Override
-	public boolean isEmpty() {
-		try {
-			arrayReadLock.lock();
-			return this.arrayHeadIndex.get() == this.arrayTailIndex.get();
-		} finally {
-			arrayReadLock.unlock();
-		}
+	public long size() throws IOException {
+		return getHeadIndex() - getTailIndex();
+	}
+
+	private final static int HEAD_POSITION = 0;
+	private final static int TAIL_POSITION = 8;
+
+	@Override
+    public long getHeadIndex() throws IOException {
+		IMappedPage metaDataPage = this.metaPageFactory.acquirePage(META_DATA_PAGE_INDEX);
+
+		return metaDataPage.getLongAtPosition(HEAD_POSITION);
+	}
+
+    @Override
+    public long getTailIndex() throws IOException {
+		IMappedPage metaDataPage = this.metaPageFactory.acquirePage(META_DATA_PAGE_INDEX);
+		return metaDataPage.getLongAtPosition(TAIL_POSITION);
+	}
+
+    private long incrementHeadIndex() throws IOException {
+        IMappedPage metaDataPage = this.metaPageFactory.acquirePage(META_DATA_PAGE_INDEX);
+        return metaDataPage.incrementLongAtPosition(HEAD_POSITION);
+    }
+
+    private void setTailIndex(long index) throws IOException {
+        IMappedPage metaDataPage = this.metaPageFactory.acquirePage(META_DATA_PAGE_INDEX);
+        metaDataPage.setLongAtPosition(TAIL_POSITION, index);
+    }
+
+	@Override
+	public boolean isEmpty() throws IOException {
+		return getHeadIndex() == getTailIndex();
 	}
 
 	@Override
@@ -522,8 +492,8 @@ public class BigArrayImpl implements IBigArray {
 		try {
 			arrayReadLock.lock();
 			long closestIndex = NOT_FOUND;
-			long tailIndex = this.arrayTailIndex.get();
-			long headIndex = this.arrayHeadIndex.get();
+			long tailIndex = getTailIndex();
+			long headIndex = getHeadIndex();
 			if (tailIndex == headIndex) return closestIndex; // empty
 			long lastIndex = headIndex - 1;
 			if (lastIndex < 0) {
@@ -616,8 +586,8 @@ public class BigArrayImpl implements IBigArray {
 				return; // can't do anything
 			}
 			
-			long tailIndex = this.arrayTailIndex.get();
-			long headIndex = this.arrayHeadIndex.get();
+			long tailIndex = getTailIndex();
+			long headIndex = getHeadIndex();
 			long totalLength = 0L;
 			while(true) {
 				if (tailIndex == headIndex) break;

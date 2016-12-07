@@ -48,7 +48,7 @@ public interface IBigArray extends Closeable {
 	 * 
 	 * @return total number
 	 */
-	long size();
+	long size() throws IOException;
 	
 	
 	/**
@@ -66,7 +66,7 @@ public interface IBigArray extends Closeable {
 	 * 
 	 * @return an index
 	 */
-	long getHeadIndex();
+	long getHeadIndex() throws IOException;
 	
 	/**
 	 * The tail of the array.
@@ -75,14 +75,14 @@ public interface IBigArray extends Closeable {
 	 * 
 	 * @return an index
 	 */
-	long getTailIndex();
+	long getTailIndex() throws IOException;
 	
 	/**
 	 * Check if the array is empty or not
 	 * 
 	 * @return true if empty false otherwise
 	 */
-	boolean isEmpty();
+	boolean isEmpty() throws IOException;
 	
 	/**
 	 * Check if the ring space of java long type has all been used up.

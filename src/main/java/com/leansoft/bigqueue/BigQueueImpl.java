@@ -1,8 +1,6 @@
 package com.leansoft.bigqueue;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -38,9 +36,6 @@ public class BigQueueImpl implements IBigQueue {
 
     // folder name for queue front index page
     final static String QUEUE_FRONT_INDEX_PAGE_FOLDER = "front_index";
-
-    // front index of the big queue,
-    final AtomicLong queueFrontIndex = new AtomicLong();
 
     // factory for queue front index page management(acquire, release, cache)
     IMappedPageFactory queueFrontIndexPageFactory;
@@ -80,16 +75,11 @@ public class BigQueueImpl implements IBigQueue {
         this.queueFrontIndexPageFactory = new MappedPageFactoryImpl(QUEUE_FRONT_INDEX_PAGE_SIZE,
                 ((BigArrayImpl) innerArray).getArrayDirectory() + QUEUE_FRONT_INDEX_PAGE_FOLDER,
                 10 * 1000/*does not matter*/);
-        IMappedPage queueFrontIndexPage = this.queueFrontIndexPageFactory.acquirePage(QUEUE_FRONT_PAGE_INDEX);
-
-        ByteBuffer queueFrontIndexBuffer = queueFrontIndexPage.getLocal(0);
-        long front = queueFrontIndexBuffer.getLong();
-        queueFrontIndex.set(front);
     }
 
     @Override
-    public boolean isEmpty() {
-        return this.queueFrontIndex.get() == this.innerArray.getHeadIndex();
+    public boolean isEmpty() throws IOException {
+        return this.getQueueFrontIndex() == this.innerArray.getHeadIndex();
     }
 
     @Override
@@ -102,26 +92,15 @@ public class BigQueueImpl implements IBigQueue {
 
     @Override
     public byte[] dequeue() throws IOException {
-        long queueFrontIndex = -1L;
         try {
             queueFrontWriteLock.lock();
-            if (this.isEmpty()) {
+            if (this.isEmpty())
                 return null;
-            }
-            queueFrontIndex = this.queueFrontIndex.get();
+
+            // Set queueFrontIndex to current queue front and THEN increment
+            long queueFrontIndex = this.incrementQueueFrontIndex();
             byte[] data = this.innerArray.get(queueFrontIndex);
-            long nextQueueFrontIndex = queueFrontIndex;
-            if (nextQueueFrontIndex == Long.MAX_VALUE) {
-                nextQueueFrontIndex = 0L; // wrap
-            } else {
-                nextQueueFrontIndex++;
-            }
-            this.queueFrontIndex.set(nextQueueFrontIndex);
-            // persist the queue front
-            IMappedPage queueFrontIndexPage = this.queueFrontIndexPageFactory.acquirePage(QUEUE_FRONT_PAGE_INDEX);
-            ByteBuffer queueFrontIndexBuffer = queueFrontIndexPage.getLocal(0);
-            queueFrontIndexBuffer.putLong(nextQueueFrontIndex);
-            queueFrontIndexPage.setDirty(true);
+
             return data;
         } finally {
             queueFrontWriteLock.unlock();
@@ -142,11 +121,7 @@ public class BigQueueImpl implements IBigQueue {
         try {
             queueFrontWriteLock.lock();
             this.innerArray.removeAll();
-            this.queueFrontIndex.set(0L);
-            IMappedPage queueFrontIndexPage = this.queueFrontIndexPageFactory.acquirePage(QUEUE_FRONT_PAGE_INDEX);
-            ByteBuffer queueFrontIndexBuffer = queueFrontIndexPage.getLocal(0);
-            queueFrontIndexBuffer.putLong(0L);
-            queueFrontIndexPage.setDirty(true);
+            this.setQueueFrontIndex(0L);
         } finally {
             queueFrontWriteLock.unlock();
         }
@@ -157,8 +132,26 @@ public class BigQueueImpl implements IBigQueue {
         if (this.isEmpty()) {
             return null;
         }
-        byte[] data = this.innerArray.get(this.queueFrontIndex.get());
+        byte[] data = this.innerArray.get(getQueueFrontIndex());
         return data;
+    }
+
+    private final static int QUEUE_FRONT_POSITION = 0;
+
+    long getQueueFrontIndex() throws IOException {
+        IMappedPage queueFrontIndexPage = this.queueFrontIndexPageFactory.acquirePage(QUEUE_FRONT_PAGE_INDEX);
+
+        return queueFrontIndexPage.getLongAtPosition(QUEUE_FRONT_POSITION);
+    }
+
+    private long incrementQueueFrontIndex() throws IOException {
+        IMappedPage queueFrontIndexPage = this.queueFrontIndexPageFactory.acquirePage(QUEUE_FRONT_PAGE_INDEX);
+        return queueFrontIndexPage.incrementLongAtPosition(QUEUE_FRONT_POSITION);
+    }
+
+    private void setQueueFrontIndex(long index) throws IOException {
+        IMappedPage queueFrontIndexPage = this.queueFrontIndexPageFactory.acquirePage(QUEUE_FRONT_PAGE_INDEX);
+        queueFrontIndexPage.setLongAtPosition(QUEUE_FRONT_POSITION, index);
     }
 
     @Override
@@ -181,7 +174,7 @@ public class BigQueueImpl implements IBigQueue {
                 return;
             }
 
-            long index = this.queueFrontIndex.get();
+            long index = this.getQueueFrontIndex();
             for (long i = index; i < this.innerArray.size(); i++) {
                 iterator.forEach(this.innerArray.get(i));
             }
@@ -214,7 +207,7 @@ public class BigQueueImpl implements IBigQueue {
 
     @Override
     public void gc() throws IOException {
-        long beforeIndex = this.queueFrontIndex.get();
+        long beforeIndex = this.getQueueFrontIndex();
         if (beforeIndex == 0L) { // wrap
             beforeIndex = Long.MAX_VALUE;
         } else {
@@ -240,8 +233,8 @@ public class BigQueueImpl implements IBigQueue {
     }
 
     @Override
-    public long size() {
-        long qFront = this.queueFrontIndex.get();
+    public long size() throws IOException {
+        long qFront = this.getQueueFrontIndex();
         long qRear = this.innerArray.getHeadIndex();
         if (qFront <= qRear) {
             return (qRear - qFront);
@@ -281,12 +274,11 @@ public class BigQueueImpl implements IBigQueue {
             if (dequeueFuture == null || dequeueFuture.isDone()) {
                 dequeueFuture = SettableFuture.create();
             }
-            if (!this.isEmpty()) {
-                try {
+            try {
+                if (!this.isEmpty())
                     dequeueFuture.set(this.dequeue());
-                } catch (IOException e) {
-                    dequeueFuture.setException(e);
-                }
+            } catch (IOException e) {
+                dequeueFuture.setException(e);
             }
         }
     }
@@ -299,12 +291,11 @@ public class BigQueueImpl implements IBigQueue {
             if (peekFuture == null || peekFuture.isDone()) {
                 peekFuture = SettableFuture.create();
             }
-            if (!this.isEmpty()) {
-                try {
+            try {
+                if (!this.isEmpty())
                     peekFuture.set(this.peek());
-                } catch (IOException e) {
-                    peekFuture.setException(e);
-                }
+            } catch (IOException e) {
+                peekFuture.setException(e);
             }
         }
     }

@@ -18,7 +18,7 @@ public interface IBigQueue extends Closeable {
 	 * 
 	 * @return ture if empty, false otherwise
 	 */
-	public boolean isEmpty();
+	public boolean isEmpty() throws IOException;
 	
 	/**
 	 * Adds an item at the back of a queue
@@ -26,7 +26,7 @@ public interface IBigQueue extends Closeable {
 	 * @param data to be enqueued data
 	 * @throws IOException exception throws if there is any IO error during enqueue operation.
 	 */
-	public void enqueue(byte[] data)  throws IOException;
+	public void enqueue(byte[] data) throws IOException;
 	
 	/**
 	 * Retrieves and removes the front of a queue
@@ -105,7 +105,7 @@ public interface IBigQueue extends Closeable {
 	 * Total number of items available in the queue.
 	 * @return total number
 	 */
-	public long size();
+	public long size() throws IOException;
 	
 	/**
 	 * Item iterator interface
