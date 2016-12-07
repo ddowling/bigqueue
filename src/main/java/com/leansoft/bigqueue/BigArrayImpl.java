@@ -285,7 +285,7 @@ public class BigArrayImpl implements IBigArray {
 				int toAppendDataItemOffset  = this.headDataItemOffset;
 
 				// Get the current head position and THEN increment head index
-				toAppendArrayIndex = incrementHeadIndex();
+				toAppendArrayIndex = getHeadIndex();
 				
 				// append data
 				toAppendDataPage = this.dataPageFactory.acquirePage(toAppendDataPageIndex);
@@ -307,6 +307,12 @@ public class BigArrayImpl implements IBigArray {
 				long currentTime = System.currentTimeMillis();
 				toAppendIndexPageBuffer.putLong(currentTime);
 				toAppendIndexPage.setDirty(true);
+
+				// Lastly increment the head index so the reader will see that the queue has one more entry on it
+                // Not this class does not support multiple writers to the queue from different processes as there
+                // is a race between the getHeadIndex() above and this increment. From within the same JVM and operations
+                // on the same BigArrayImpl instance the appendLock will guard against this race.
+				incrementHeadIndex();
 			} finally {
 				
 				appendLock.unlock();
@@ -423,7 +429,12 @@ public class BigArrayImpl implements IBigArray {
 
 	@Override
 	public long size() throws IOException {
-		return getHeadIndex() - getTailIndex();
+	    try {
+            arrayReadLock.lock();
+            return getHeadIndex() - getTailIndex();
+        } finally {
+	        arrayReadLock.unlock();
+        }
 	}
 
 	private final static int HEAD_POSITION = 0;
@@ -454,7 +465,12 @@ public class BigArrayImpl implements IBigArray {
 
 	@Override
 	public boolean isEmpty() throws IOException {
-		return getHeadIndex() == getTailIndex();
+	    try {
+            arrayReadLock.lock();
+            return getHeadIndex() == getTailIndex();
+        } finally {
+	        arrayReadLock.unlock();
+        }
 	}
 
 	@Override
