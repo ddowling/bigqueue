@@ -89,8 +89,11 @@ public class MappedPageFactoryImpl implements IMappedPageFactory {
 							if (true && raf.length() == 0) {
 								if (logger.isDebugEnabled())
 									logger.debug("Setting " + fileName + " size to " + this.pageSize);
-								byte[] b = new byte[this.pageSize];
-								raf.write(b);
+
+								int block_size = 1<<16;
+								byte[] b = new byte[block_size];
+								for (long bytes_written = 0; bytes_written < this.pageSize; bytes_written += block_size)
+									raf.write(b);
 							}
 
 							channel = raf.getChannel();
