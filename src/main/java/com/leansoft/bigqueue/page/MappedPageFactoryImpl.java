@@ -83,6 +83,15 @@ public class MappedPageFactoryImpl implements IMappedPageFactory {
 						try {
 							String fileName = this.getFileNameByIndex(index);
 							raf = new RandomAccessFile(fileName, "rw");
+
+							// Populate the file if empty to prevent disk over commit from causing the JVM to SIGBUS
+							// This causes a small performance hit but it is better than a JVM crash
+							if (true && raf.length() == 0) {
+								logger.info("Setting " + fileName + " size to " + this.pageSize);
+								byte[] b = new byte[this.pageSize];
+								raf.write(b);
+							}
+
 							channel = raf.getChannel();
 							MappedByteBuffer mbb = channel.map(READ_WRITE, 0, this.pageSize);
 							mpi = new MappedPageImpl(mbb, fileName, index);
