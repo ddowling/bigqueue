@@ -187,7 +187,8 @@ public class MappedPageFactoryImpl implements IMappedPageFactory {
 			}
 		}
 		if (deleted) {
-			logger.info("Page file " + fileName + " was just deleted.");
+			if (logger.isDebugEnabled())
+				logger.debug("Page file " + fileName + " was just deleted.");
 		} else {
 			logger.warn("fail to delete file " + fileName + " after max " + maxRound + " rounds of try, you may delete it manually.");
 		}
