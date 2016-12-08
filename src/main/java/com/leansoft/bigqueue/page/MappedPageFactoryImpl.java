@@ -87,7 +87,8 @@ public class MappedPageFactoryImpl implements IMappedPageFactory {
 							// Populate the file if empty to prevent disk over commit from causing the JVM to SIGBUS
 							// This causes a small performance hit but it is better than a JVM crash
 							if (true && raf.length() == 0) {
-								logger.info("Setting " + fileName + " size to " + this.pageSize);
+								if (logger.isDebugEnabled())
+									logger.debug("Setting " + fileName + " size to " + this.pageSize);
 								byte[] b = new byte[this.pageSize];
 								raf.write(b);
 							}
