@@ -50,10 +50,19 @@ public interface IBigQueue extends Closeable {
 	/**
 	 * Removes all items of a queue, this will empty the queue and delete all back data files.
 	 * 
-	 * @throws IOException exception throws if there is any IO error during dequeue operation.
+	 * @throws IOException exception throws if there is any IO error during remove operation.
 	 */
 	public void removeAll() throws IOException;
-	
+
+	/**
+	 * Remove n items from a queue in one operation. This operation is useful if the queue is being examined using the
+	 * peek() or peekAtOffset() methods and a batch of previously examined entries needs to be removed.
+	 *
+	 * @param n items to remove
+	 * @throws IOException if there is any IO error during the remove operation.
+	 */
+	public void removeN(long n) throws IOException;
+
 	/**
 	 * Retrieves the item at the front of a queue
 	 * 
@@ -62,6 +71,17 @@ public interface IBigQueue extends Closeable {
 	 */
 	public byte[] peek()  throws IOException;
 
+	/**
+	 * Retrieves the item at an offset along a queue. This method is used together with removeN to implement
+	 * a simple transaction model on a queue where a number of entries can be sequentially examined on the queue
+	 * using peekAtOffset() and then the actual dequeue can be committed by calling removeN() or rolled back by
+	 * resetting the offset back to 0.
+	 *
+	 * @param offset along the queue to examine
+	 * @return data from the queue at the given offset or null if the offset is outside the queue bounds
+	 * @throws IOException exception throws if there is any IO error during peek operation.
+	 */
+	public byte[] peekAtOffset(long offset)  throws IOException;
 
     /**
      * Retrieves the item at the front of a queue asynchronously.

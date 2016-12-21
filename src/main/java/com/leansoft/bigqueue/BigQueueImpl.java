@@ -99,9 +99,8 @@ public class BigQueueImpl implements IBigQueue {
 
             // Set queueFrontIndex to current queue front and THEN increment
             long queueFrontIndex = this.incrementQueueFrontIndex();
-            byte[] data = this.innerArray.get(queueFrontIndex);
 
-            return data;
+            return this.innerArray.get(queueFrontIndex);
         } finally {
             queueFrontWriteLock.unlock();
         }
@@ -128,12 +127,41 @@ public class BigQueueImpl implements IBigQueue {
     }
 
     @Override
+    public void removeN(long n) throws IOException {
+        try {
+            queueFrontWriteLock.lock();
+
+            if (n < 0)
+                return;
+
+            long p = getQueueFrontIndex() + n;
+            long head = this.innerArray.getHeadIndex();
+            if (p > head)
+                p = head;
+
+            this.setQueueFrontIndex(p);
+
+        } finally {
+            queueFrontWriteLock.unlock();
+        }
+    }
+
+    @Override
     public byte[] peek() throws IOException {
         if (this.isEmpty()) {
             return null;
         }
-        byte[] data = this.innerArray.get(getQueueFrontIndex());
-        return data;
+
+        return this.innerArray.get(getQueueFrontIndex());
+    }
+
+    @Override
+    public byte[] peekAtOffset(long offset)  throws IOException {
+        long p = getQueueFrontIndex() + offset;
+        if (offset < 0 || p >= this.innerArray.getHeadIndex())
+            return null;
+        else
+            return this.innerArray.get(p);
     }
 
     private final static int QUEUE_FRONT_POSITION = 0;
@@ -160,12 +188,6 @@ public class BigQueueImpl implements IBigQueue {
         return peekFuture;
     }
 
-    /**
-     * apply an implementation of a ItemIterator interface for each queue item
-     *
-     * @param iterator
-     * @throws IOException
-     */
     @Override
     public void applyForEach(ItemIterator iterator) throws IOException {
         try {

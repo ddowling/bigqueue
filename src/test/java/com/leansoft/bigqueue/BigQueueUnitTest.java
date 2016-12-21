@@ -426,8 +426,44 @@ public class BigQueueUnitTest {
     }
     */
 
+    @Test
+    public void peekAtOffset() throws IOException {
+        bigQueue = new BigQueueImpl(testDir, "peek_test");
+        assertNotNull(bigQueue);
 
-	@After
+        int loop = 1000;
+        for(int i = 0; i < loop; i++)
+            bigQueue.enqueue(("" + i).getBytes());
+
+        assertTrue(bigQueue.size() == loop);
+
+        byte[] data = bigQueue.peek();
+        assertEquals("0", new String(data));
+
+        for(int i = 0; i < loop; i++) {
+            data = bigQueue.peekAtOffset(i);
+            assertEquals("" + i, new String(data));
+        }
+
+        int remove_size = 100;
+        for (int i = 0; i < 10; i++) {
+            bigQueue.removeN(remove_size);
+            assertTrue(bigQueue.size() == loop - remove_size * (i+1));
+
+            for (int j = 0; j < bigQueue.size(); j++) {
+                data = bigQueue.peekAtOffset(j);
+                assertEquals("" + (j + (i+1) * remove_size), new String(data));
+            }
+        }
+        assertTrue(bigQueue.isEmpty());
+        assertTrue(bigQueue.peek() == null);
+        assertTrue(bigQueue.peekAtOffset(100) == null);
+
+        bigQueue.gc();
+        bigQueue.close();
+    }
+
+    @After
 	public void clean() throws IOException {
 		if (bigQueue != null) {
 			bigQueue.removeAll();
